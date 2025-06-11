@@ -1,49 +1,97 @@
 import streamlit as st
+import sqlite3
+import pandas as pd
 
-st.set_page_config(page_title="Aktieräknaren", layout="centered")
+def init_db():
+    conn = sqlite3.connect('aktieraknaren.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS companies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        kurs REAL,
+        pe1 REAL, pe2 REAL, pe3 REAL, pe4 REAL, pe5 REAL,
+        peg1 REAL, peg2 REAL, peg3 REAL, peg4 REAL, peg5 REAL,
+        ps1 REAL, ps2 REAL, ps3 REAL, ps4 REAL, ps5 REAL,
+        vinst_nuvarande REAL,
+        vinst_next REAL,
+        omsattning_nuvarande REAL,
+        omsattning_next REAL
+    )
+    ''')
+    conn.commit()
+    conn.close()
 
-st.title("📈 Aktieräknaren")
-st.markdown("Fyll i nyckeltal för att få en beräknad riktkurs baserat på dina antaganden.")
+def get_companies():
+    conn = sqlite3.connect('aktieraknaren.db')
+    df = pd.read_sql_query("SELECT * FROM companies", conn)
+    conn.close()
+    return df
 
-st.header("🔢 Inmatning av nyckeltal")
+def save_company(data, edit_id=None):
+    conn = sqlite3.connect('aktieraknaren.db')
+    cursor = conn.cursor()
+    if edit_id:
+        cursor.execute('DELETE FROM companies WHERE id=?', (edit_id,))
+    cursor.execute('''
+        INSERT INTO companies (name, kurs, pe1, pe2, pe3, pe4, pe5,
+        peg1, peg2, peg3, peg4, peg5,
+        ps1, ps2, ps3, ps4, ps5,
+        vinst_nuvarande, vinst_next, omsattning_nuvarande, omsattning_next)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', data)
+    conn.commit()
+    conn.close()
 
-kurs = st.number_input("Nuvarande aktiekurs (SEK):", min_value=0.0, step=0.01)
+def delete_company(company_id):
+    conn = sqlite3.connect('aktieraknaren.db')
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM companies WHERE id=?', (company_id,))
+    conn.commit()
+    conn.close()
 
-st.subheader("P/E (senaste 5 kvartalen)")
-pe_list = [st.number_input(f"P/E kvartal {-i}:", min_value=0.0, step=0.1, key=f"pe{i}") for i in range(5)]
+st.set_page_config(page_title="Aktieraknaren")
+st.title("📈 Aktieraknaren")
 
-st.subheader("PEG (senaste 5 kvartalen)")
-peg_list = [st.number_input(f"PEG kvartal {-i}:", min_value=0.0, step=0.1, key=f"peg{i}") for i in range(5)]
+init_db()
 
-st.subheader("P/S (senaste 5 kvartalen)")
-ps_list = [st.number_input(f"P/S kvartal {-i}:", min_value=0.0, step=0.1, key=f"ps{i}") for i in range(5)]
+st.header("Lägg till / Redigera bolag")
 
-st.header("📊 Vinst och tillväxt")
-vinst_år = st.number_input("Beräknad vinst per aktie i år (SEK):", min_value=0.0, step=0.01)
-vinst_nästa_år = st.number_input("Beräknad vinst per aktie nästa år (SEK):", min_value=0.0, step=0.01)
+companies = get_companies()
+edit_id = None
+selected = st.selectbox("Välj bolag att redigera", [""] + companies["name"].tolist())
+if selected:
+    edit_row = companies[companies["name"] == selected].iloc[0]
+    edit_id = int(edit_row["id"])
+else:
+    edit_row = {}
 
-tillväxt_oms_iår = st.number_input("Förväntad omsättningstillväxt i år (%):", min_value=-100.0, step=0.1)
-tillväxt_oms_nästa = st.number_input("Förväntad omsättningstillväxt nästa år (%):", min_value=-100.0, step=0.1)
+name = st.text_input("Bolagsnamn", edit_row.get("name", ""))
+kurs = st.number_input("Nuvarande aktiekurs", value=edit_row.get("kurs", 0.0))
 
-st.header("📈 Beräkna riktkurs")
+pe = [st.number_input(f"P/E kvartal {i+1}", value=edit_row.get(f"pe{i+1}", 0.0)) for i in range(5)]
+peg = [st.number_input(f"PEG kvartal {i+1}", value=edit_row.get(f"peg{i+1}", 0.0)) for i in range(5)]
+ps = [st.number_input(f"P/S kvartal {i+1}", value=edit_row.get(f"ps{i+1}", 0.0)) for i in range(5)]
 
-if st.button("Beräkna riktkurs"):
-    snitt_pe = sum(pe_list) / len(pe_list)
-    snitt_peg = sum(peg_list) / len(peg_list)
-    snitt_ps = sum(ps_list) / len(ps_list)
+vinst_nu = st.number_input("Vinst i år", value=edit_row.get("vinst_nuvarande", 0.0))
+vinst_next = st.number_input("Vinst nästa år", value=edit_row.get("vinst_next", 0.0))
 
-    riktkurs = 0.0
-    pe_värde = vinst_nästa_år * snitt_pe
-    ps_värde = kurs * (1 + (tillväxt_oms_nästa / 100))
-    peg_justering = vinst_nästa_år * (snitt_pe / snitt_peg) if snitt_peg > 0 else 0
+oms_iår = st.number_input("Omsättningstillväxt i år (%)", value=edit_row.get("omsattning_nuvarande", 0.0))
+oms_next = st.number_input("Omsättningstillväxt nästa år (%)", value=edit_row.get("omsattning_next", 0.0))
 
-    riktkurs = (pe_värde + ps_värde + peg_justering) / 3
+if st.button("Spara bolag"):
+    if name:
+        all_data = [name, kurs] + pe + peg + ps + [vinst_nu, vinst_next, oms_iår, oms_next]
+        save_company(all_data, edit_id)
+        st.success("Bolaget har sparats!")
+        st.experimental_rerun()
+    else:
+        st.warning("Fyll i bolagsnamn först")
 
-    st.success(f"🔮 Beräknad riktkurs: **{riktkurs:.2f} SEK**")
-    st.markdown(f"""
-    **Detaljer:**
-    - Snitt P/E: `{snitt_pe:.2f}`
-    - Snitt PEG: `{snitt_peg:.2f}`
-    - Snitt P/S: `{snitt_ps:.2f}`
-    - Vinst nästa år: `{vinst_nästa_år:.2f} SEK`
-    """)
+if selected and st.button("❌ Ta bort bolag"):
+    delete_company(edit_id)
+    st.warning(f"Bolaget {selected} togs bort")
+    st.experimental_rerun()
+
+st.header("Alla bolag")
+st.dataframe(get_companies())
