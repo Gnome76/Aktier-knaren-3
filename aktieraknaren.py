@@ -1,63 +1,79 @@
 import streamlit as st
+import json
+import os
 
-# Initiera session_state om inte redan finns
-if "companies" not in st.session_state:
+st.set_page_config(page_title="Aktieräknaren", layout="wide")
+
+st.title("📊 Aktieräknaren")
+st.markdown("Analysera aktier med hjälp av historiska nyckeltal och tillväxt.")
+
+# Filnamn för lokal databas
+DATA_FILE = "data.json"
+
+# Ladda eller initiera databas
+if os.path.exists(DATA_FILE):
+    with open(DATA_FILE, "r") as f:
+        st.session_state.companies = json.load(f)
+else:
     st.session_state.companies = {}
 
-if "selected_company" not in st.session_state:
+# Funktion för att spara till JSON
+def save_data():
+    with open(DATA_FILE, "w") as f:
+        json.dump(st.session_state.companies, f, indent=2)
+
+# Funktion för att rensa formulär
+def reset_form():
     st.session_state.selected_company = None
+    for i in range(1, 6):
+        st.session_state[f"pe_{i}"] = 0.0
+        st.session_state[f"ps_{i}"] = 0.0
+    st.session_state["Förväntad vinst i år"] = 0.0
+    st.session_state["Förväntad vinst nästa år"] = 0.0
+    st.session_state["Omsättningstillväxt i år (%)"] = 0.0
+    st.session_state["Omsättningstillväxt nästa år (%)"] = 0.0
+    st.session_state["Nuvarande kurs"] = 0.0
+    st.session_state["Bolagsnamn"] = ""
 
-st.title("📈 Aktieräknaren")
-
-# Funktion för att räkna ut targetkurs
-def calculate_target_price(pe_values, ps_values, earnings_this_year, earnings_next_year,
-                           growth_this_year, growth_next_year, current_price):
-    avg_pe = sum(pe_values) / len(pe_values)
-    avg_ps = sum(ps_values) / len(ps_values)
-    avg_growth = (growth_this_year + growth_next_year) / 2
-
-    avg_earnings = (earnings_this_year + earnings_next_year) / 2
-    avg_sales_growth_factor = 1 + avg_growth / 100
-
-    target_pe = avg_pe * avg_earnings
-    target_ps = avg_ps * avg_sales_growth_factor * avg_earnings
-
-    target_price = (target_pe + target_ps) / 2
-    undervaluation_percent = ((target_price - current_price) / current_price) * 100
-
-    price_margin_30 = target_price * 0.7
-    price_margin_40 = target_price * 0.6
-
-    return round(target_price, 2), round(undervaluation_percent, 2), round(price_margin_30, 2), round(price_margin_40, 2)
-
-# Lägg till nytt bolag-knapp (alltid synlig)
+# Knapp för att lägga till nytt bolag
 if st.button("➕ Lägg till nytt bolag"):
-    st.session_state.selected_company = None
-    for key in list(st.session_state.keys()):
-        if key.startswith("pe_") or key.startswith("ps_"):
-            st.session_state[key] = 0.0
-    # Nollställ övriga inputs
-    for key in ["Förväntad vinst i år", "Förväntad vinst nästa år", "Omsättningstillväxt i år (%)",
-                "Omsättningstillväxt nästa år (%)", "Nuvarande kurs"]:
-        if key in st.session_state:
-            del st.session_state[key]
+    reset_form()
+
+# Lista på alla bolag sorterade
+company_names = sorted(st.session_state.companies.keys())
+
+# Välj ett bolag att visa/redigera
+selected = st.selectbox("📂 Välj ett bolag", [""] + company_names)
+if selected:
+    st.session_state.selected_company = selected
+    data = st.session_state.companies[selected]
+    for i in range(5):
+        st.session_state[f"pe_{i+1}"] = data["pe"][i]
+        st.session_state[f"ps_{i+1}"] = data["ps"][i]
+    st.session_state["Förväntad vinst i år"] = data["earnings_this_year"]
+    st.session_state["Förväntad vinst nästa år"] = data["earnings_next_year"]
+    st.session_state["Omsättningstillväxt i år (%)"] = data["growth_this_year"]
+    st.session_state["Omsättningstillväxt nästa år (%)"] = data["growth_next_year"]
+    st.session_state["Nuvarande kurs"] = data["current_price"]
+    st.session_state["Bolagsnamn"] = selected
 
 # Formulär
 with st.form("company_form"):
-    st.subheader("Lägg till / redigera bolag")
+    name = st.text_input("Bolagsnamn", value=st.session_state.get("Bolagsnamn", ""))
+    cols = st.columns(5)
+    pe_values = [cols[i].number_input(f"P/E {i+1}", min_value=0.0, step=0.1,
+                                      value=st.session_state.get(f"pe_{i+1}", 0.0),
+                                      key=f"pe_{i+1}") for i in range(5)]
+    cols = st.columns(5)
+    ps_values = [cols[i].number_input(f"P/S {i+1}", min_value=0.0, step=0.1,
+                                      value=st.session_state.get(f"ps_{i+1}", 0.0),
+                                      key=f"ps_{i+1}") for i in range(5)]
 
-    name = st.text_input("Bolagsnamn", value="" if st.session_state.selected_company is None else st.session_state.selected_company)
-
-    pe_values = [st.number_input(f"P/E {i+1}", key=f"pe_{i}", value=0.0, format="%.2f") for i in range(5)]
-    ps_values = [st.number_input(f"P/S {i+1}", key=f"ps_{i}", value=0.0, format="%.2f") for i in range(5)]
-
-    earnings_this_year = st.number_input("Förväntad vinst i år", value=0.0, format="%.2f")
-    earnings_next_year = st.number_input("Förväntad vinst nästa år", value=0.0, format="%.2f")
-
-    growth_this_year = st.number_input("Omsättningstillväxt i år (%)", value=0.0, format="%.2f")
-    growth_next_year = st.number_input("Omsättningstillväxt nästa år (%)", value=0.0, format="%.2f")
-
-    current_price = st.number_input("Nuvarande kurs", value=0.0, format="%.2f")
+    earnings_this_year = st.number_input("Förväntad vinst i år", value=st.session_state.get("Förväntad vinst i år", 0.0))
+    earnings_next_year = st.number_input("Förväntad vinst nästa år", value=st.session_state.get("Förväntad vinst nästa år", 0.0))
+    growth_this_year = st.number_input("Omsättningstillväxt i år (%)", value=st.session_state.get("Omsättningstillväxt i år (%)", 0.0))
+    growth_next_year = st.number_input("Omsättningstillväxt nästa år (%)", value=st.session_state.get("Omsättningstillväxt nästa år (%)", 0.0))
+    current_price = st.number_input("Nuvarande kurs", value=st.session_state.get("Nuvarande kurs", 0.0))
 
     submitted = st.form_submit_button("💾 Spara bolag")
 
@@ -71,63 +87,68 @@ with st.form("company_form"):
             "growth_next_year": growth_next_year,
             "current_price": current_price
         }
-        st.session_state.selected_company = name
-        st.success(f"{name} sparad!")
+        save_data()
+        st.success(f"{name} sparades!")
+        reset_form()
 
-# Lista över sparade bolag
-if st.session_state.companies:
-    st.subheader("📊 Sparade bolag")
+# Radera bolag
+if st.session_state.get("selected_company"):
+    if st.button("🗑️ Radera bolag"):
+        del st.session_state.companies[st.session_state.selected_company]
+        save_data()
+        st.success("Bolag raderat.")
+        reset_form()
 
-    company_names = sorted(st.session_state.companies.keys())
-
-    selected = st.selectbox("Välj bolag att visa/redigera", company_names)
-    if selected:
-        st.session_state.selected_company = selected
-        data = st.session_state.companies[selected]
-
-        target_price, undervalued_pct, price_30, price_40 = calculate_target_price(
-            data["pe"], data["ps"], data["earnings_this_year"], data["earnings_next_year"],
-            data["growth_this_year"], data["growth_next_year"], data["current_price"]
-        )
-
-        st.markdown(f"""
-        ### 📈 Analys för {selected}
-        **Targetkurs:** {target_price} kr  
-        **Undervärdering:** {undervalued_pct}%  
-        **Kursnivå för 30% säkerhetsmarginal:** {price_30} kr  
-        **Kursnivå för 40% säkerhetsmarginal:** {price_40} kr  
-        """)
-
-        if st.button("🗑️ Ta bort bolag"):
-            del st.session_state.companies[selected]
-            st.session_state.selected_company = None
-            st.success(f"{selected} borttaget.")
-
-# Filtrera undervärderade bolag
-if st.session_state.companies:
-    st.subheader("🔍 Filtrera undervärderade bolag")
-    filter_option = st.selectbox(
-        "Välj filter",
-        ["Visa alla", "Undervärderade 30–39,99%", "Undervärderade >40%"]
-    )
-
+# 🔍 Filtrera undervärderade
+with st.expander("📉 Filtrera undervärderade bolag"):
+    undervalued_filter = st.selectbox("Visa bolag som är undervärderade med:", 
+                                      ["Visa alla", "30–39,99%", "40% eller mer"])
     filtered = []
     for name, data in st.session_state.companies.items():
-        try:
-            _, undervalued_pct, _, _ = calculate_target_price(
-                data["pe"], data["ps"], data["earnings_this_year"], data["earnings_next_year"],
-                data["growth_this_year"], data["growth_next_year"], data["current_price"]
-            )
-            if filter_option == "Visa alla":
-                filtered.append(name)
-            elif filter_option == "Undervärderade 30–39,99%" and 30 <= undervalued_pct < 40:
-                filtered.append(name)
-            elif filter_option == "Undervärderade >40%" and undervalued_pct >= 40:
-                filtered.append(name)
-        except:
-            pass
+        avg_pe = sum(data["pe"]) / len(data["pe"])
+        avg_ps = sum(data["ps"]) / len(data["ps"])
+        est_earnings = data["earnings_next_year"]
+        est_growth = 1 + data["growth_next_year"] / 100
+        est_sales = est_growth
+        target_price_pe = est_earnings * avg_pe
+        target_price_ps = est_sales * avg_ps  # förenklad
+        fair_price = (target_price_pe + target_price_ps) / 2
+        undervaluation = (fair_price - data["current_price"]) / data["current_price"]
+
+        if undervalued_filter == "30–39,99%" and 0.3 <= undervaluation < 0.4:
+            filtered.append(name)
+        elif undervalued_filter == "40% eller mer" and undervaluation >= 0.4:
+            filtered.append(name)
+        elif undervalued_filter == "Visa alla" and undervaluation > 0:
+            filtered.append(name)
 
     if filtered:
-        st.selectbox("Resultat:", sorted(filtered))
+        st.selectbox("📜 Bolag i urvalet", sorted(filtered))
     else:
-        st.info("Inga bolag matchar det valda filtret.")
+        st.write("Inga bolag matchar filtret.")
+
+# 📈 Visa analys
+st.subheader("📊 Analys av valt bolag")
+if st.session_state.get("selected_company"):
+    data = st.session_state.companies[st.session_state.selected_company]
+    avg_pe = sum(data["pe"]) / len(data["pe"])
+    avg_ps = sum(data["ps"]) / len(data["ps"])
+    est_earnings = data["earnings_next_year"]
+    est_growth = 1 + data["growth_next_year"] / 100
+    est_sales = est_growth
+    target_price_pe = est_earnings * avg_pe
+    target_price_ps = est_sales * avg_ps
+    target_price = (target_price_pe + target_price_ps) / 2
+
+    current_price = data["current_price"]
+    undervaluation = (target_price - current_price) / current_price
+    margin_30 = target_price * 0.7
+    margin_40 = target_price * 0.6
+
+    st.markdown(f"""
+    **Targetkurs:** `{target_price:.2f} SEK`  
+    **Nuvarande kurs:** `{current_price:.2f} SEK`  
+    **Undervärdering:** `{undervaluation * 100:.1f}%`  
+    **Köp om du vill ha 30% marginal:** `{margin_30:.2f} SEK`  
+    **Köp om du vill ha 40% marginal:** `{margin_40:.2f} SEK`
+    """)
