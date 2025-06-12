@@ -3,7 +3,7 @@ import pandas as pd
 import os
 
 st.set_page_config(page_title="Aktieräknaren", layout="centered")
-st.title("🎯 Aktieräknaren – Spara & Beräkna Targetkurs")
+st.title("📈 Aktieräknaren")
 
 DATA_FILE = "bolag_data.csv"
 
@@ -14,20 +14,23 @@ else:
         "Bolagsnamn", "Nuvarande kurs", "Vinst i år", "Vinst nästa år",
         "Oms tillväxt i år", "Oms tillväxt nästa år",
         "PE1", "PE2", "PE3", "PE4", "PE5",
-        "PEG1", "PEG2", "PEG3", "PEG4", "PEG5",
         "PS1", "PS2", "PS3", "PS4", "PS5"
     ])
 
 st.sidebar.header("📁 Sparade bolag")
-if not df.empty:
-    selected = st.sidebar.selectbox("Välj bolag att visa eller redigera", df["Bolagsnamn"])
+new_entry = st.sidebar.button("➕ Lägg till nytt bolag")
+
+if new_entry:
+    selected = None
+    data = None
+elif not df.empty:
+    selected = st.sidebar.selectbox("Välj bolag att visa eller redigera", sorted(df["Bolagsnamn"]))
+    data = df[df["Bolagsnamn"] == selected].iloc[0]
     if st.sidebar.button("❌ Ta bort bolag"):
         df = df[df["Bolagsnamn"] != selected]
         df.to_csv(DATA_FILE, index=False)
         st.sidebar.success("Bolaget togs bort. Ladda om sidan.")
         st.stop()
-    else:
-        data = df[df["Bolagsnamn"] == selected].iloc[0]
 else:
     selected = None
     data = None
@@ -42,8 +45,7 @@ with st.form("input_form"):
 
     st.subheader("P/E historik")
     pe_hist = [st.number_input(f"P/E {i+1}", value=data[f"PE{i+1}"] if data is not None else 0.0, key=f"pe{i}") for i in range(5)]
-    st.subheader("PEG historik")
-    peg_hist = [st.number_input(f"PEG {i+1}", value=data[f"PEG{i+1}"] if data is not None else 0.0, key=f"peg{i}") for i in range(5)]
+
     st.subheader("P/S historik")
     ps_hist = [st.number_input(f"P/S {i+1}", value=data[f"PS{i+1}"] if data is not None else 0.0, key=f"ps{i}") for i in range(5)]
 
@@ -51,53 +53,78 @@ with st.form("input_form"):
 
 if submitted:
     pe_snitt = sum(pe_hist) / 5
-    peg_snitt = sum(peg_hist) / 5
     ps_snitt = sum(ps_hist) / 5
-    vinsttillvaxt = ((vinst_nasta_ar - vinst_i_ar) / vinst_i_ar) * 100 if vinst_i_ar != 0 else 0
     oms_tillv_snitt = (oms_tillv_i_ar + oms_tillv_nasta_ar) / 2
 
-    # Targetkurs via P/E
     target_pe = vinst_nasta_ar * pe_snitt
-
-    # Targetkurs via PEG (räknar fram rimligt PE)
-    rimligt_pe = peg_snitt * (vinsttillvaxt if vinsttillvaxt != 0 else 1)
-    target_peg = vinst_nasta_ar * rimligt_pe
-
-    # Targetkurs via P/S (beräknar omsättning per aktie baserat på kurs idag)
-    oms_per_aktie_idag = kurs / ps_snitt if ps_snitt != 0 else 1
+    oms_per_aktie_idag = kurs / ps_snitt if ps_snitt != 0 else 0
     oms_per_aktie_framtid = oms_per_aktie_idag * (1 + oms_tillv_snitt / 100)
     target_ps = ps_snitt * oms_per_aktie_framtid
 
-    riktkurs = (target_pe + target_peg + target_ps) / 3
+    riktkurs = (target_pe + target_ps) / 2
+    diff_procent = ((riktkurs - kurs) / riktkurs) * 100
 
-    undervarderad = kurs < riktkurs
-    margin_30 = riktkurs * 0.7
-    margin_40 = riktkurs * 0.6
-
-    st.markdown(f"### 📊 Resultat för **{namn}**")
-    st.success(f"🎯 Targetkurs (snitt): **{riktkurs:.2f} kr**")
-    st.info(f"📌 Baserat på P/E: {target_pe:.2f}, PEG: {target_peg:.2f}, P/S: {target_ps:.2f}")
-    st.write(f"📉 Nuvarande kurs: **{kurs:.2f} kr**")
-    st.write(f"🔍 Aktien är **{'undervärderad ✅' if undervarderad else 'övervärderad ❌'}**")
-
-    st.markdown("#### 📐 Säkerhetsmarginal")
-    st.write(f"💰 Köp om du vill ha 30% marginal: **{margin_30:.2f} kr**")
-    st.write(f"💰 Köp om du vill ha 40% marginal: **{margin_40:.2f} kr**")
+    buy_lvl_30 = riktkurs * 0.7
+    buy_lvl_40 = riktkurs * 0.6
 
     new_row = {
-        "Bolagsnamn": namn,
-        "Nuvarande kurs": kurs,
-        "Vinst i år": vinst_i_ar,
-        "Vinst nästa år": vinst_nasta_ar,
-        "Oms tillväxt i år": oms_tillv_i_ar,
-        "Oms tillväxt nästa år": oms_tillv_nasta_ar,
+        "Bolagsnamn": namn, "Nuvarande kurs": kurs, "Vinst i år": vinst_i_ar, "Vinst nästa år": vinst_nasta_ar,
+        "Oms tillväxt i år": oms_tillv_i_ar, "Oms tillväxt nästa år": oms_tillv_nasta_ar,
+        **{f"PE{i+1}": pe_hist[i] for i in range(5)},
+        **{f"PS{i+1}": ps_hist[i] for i in range(5)}
     }
-    for i in range(5):
-        new_row[f"PE{i+1}"] = pe_hist[i]
-        new_row[f"PEG{i+1}"] = peg_hist[i]
-        new_row[f"PS{i+1}"] = ps_hist[i]
 
     df = df[df["Bolagsnamn"] != namn]
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    df = df.sort_values("Bolagsnamn")
     df.to_csv(DATA_FILE, index=False)
-    st.success("✅ Bolaget har sparats!")
+
+    st.success(f"{namn} sparat och analyserat!")
+
+    st.subheader("🔍 Analys")
+    st.markdown(f"""
+    **Targetkurs:** {riktkurs:.2f} kr  
+    **Nuvarande kurs:** {kurs:.2f} kr  
+    **Undervärderad:** {"✅ Ja" if diff_procent > 0 else "❌ Nej"}  
+    **Differens till riktkurs:** {diff_procent:.2f}%  
+    **Köp om du vill ha 30% marginal:** {buy_lvl_30:.2f} kr  
+    **Köp om du vill ha 40% marginal:** {buy_lvl_40:.2f} kr  
+    """)
+
+# === FILTERING UNDERVÄRDERADE BOLAG ===
+st.sidebar.header("🔎 Filtrera undervärderade")
+if not df.empty:
+    df["PE-snitt"] = df[[f"PE{i}" for i in range(1, 6)]].mean(axis=1)
+    df["PS-snitt"] = df[[f"PS{i}" for i in range(1, 6)]].mean(axis=1)
+    df["Oms tillväxt snitt"] = (df["Oms tillväxt i år"] + df["Oms tillväxt nästa år"]) / 2
+
+    df["Target PE"] = df["Vinst nästa år"] * df["PE-snitt"]
+    df["Oms per aktie"] = df["Nuvarande kurs"] / df["PS-snitt"]
+    df["Oms framtid"] = df["Oms per aktie"] * (1 + df["Oms tillväxt snitt"] / 100)
+    df["Target PS"] = df["PS-snitt"] * df["Oms framtid"]
+    df["Riktkurs"] = (df["Target PE"] + df["Target PS"]) / 2
+    df["Diff %"] = ((df["Riktkurs"] - df["Nuvarande kurs"]) / df["Riktkurs"]) * 100
+
+    filter_val = st.sidebar.radio("Visa bolag som är undervärderade med:", [
+        "Visa alla undervärderade", "30–39,99%", "≥ 40%", "Visa alla"
+    ])
+
+    if filter_val == "Visa alla undervärderade":
+        filt_df = df[df["Diff %"] > 0]
+    elif filter_val == "30–39,99%":
+        filt_df = df[(df["Diff %"] >= 30) & (df["Diff %"] < 40)]
+    elif filter_val == "≥ 40%":
+        filt_df = df[df["Diff %"] >= 40]
+    else:
+        filt_df = df.copy()
+
+    if not filt_df.empty:
+        chosen = st.sidebar.selectbox("📋 Välj bolag från filter", sorted(filt_df["Bolagsnamn"]))
+        show = filt_df[filt_df["Bolagsnamn"] == chosen].iloc[0]
+        st.sidebar.markdown(f"""
+        **{show['Bolagsnamn']}**  
+        Targetkurs: {show['Riktkurs']:.2f} kr  
+        Diff: {show['Diff %']:.2f}%  
+        """)
+    else:
+        st.sidebar.write("🚫 Inga bolag matchar filtret.")
