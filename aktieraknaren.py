@@ -2,10 +2,10 @@ import streamlit as st
 import json
 import os
 
-# Filväg för att spara bolag
+# Filnamn för databasen
 DATA_FILE = "data.json"
 
-# Funktioner
+# === FUNKTIONER ===
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
@@ -38,17 +38,15 @@ def undervaluation_status(current_price, target_price):
     else:
         return "Övervärderad", diff_pct
 
-# App start
+# === APP START ===
 st.set_page_config(page_title="Aktieräknaren", layout="centered")
 st.title("📈 Aktieräknaren")
 
-# Ladda tidigare bolag
 companies = load_data()
-
 if "selected_company" not in st.session_state:
     st.session_state.selected_company = None
 
-# Filtreringspanel
+# === SIDOPANEL ===
 st.sidebar.header("🔍 Filtrera bolag")
 filter_option = st.sidebar.selectbox(
     "Visa bolag som är...",
@@ -77,27 +75,32 @@ if selected:
 else:
     name = ""
     current_price = 0.0
-    pe_values = [""] * 5
-    ps_values = [""] * 5
-    earnings_y = ""
-    earnings_ny = ""
-    growth_y = ""
-    growth_ny = ""
+    pe_values = [0.0] * 5
+    ps_values = [0.0] * 5
+    earnings_y = 0.0
+    earnings_ny = 0.0
+    growth_y = 0.0
+    growth_ny = 0.0
 
-# Formulär för ny bolagsinmatning
+# === FORMULÄR ===
 st.header("➕ Lägg till / Redigera bolag")
 with st.form("company_form"):
+    name = st.text_input("Bolagsnamn", value=name)
+    current_price = st.number_input("Nuvarande kurs", value=current_price, step=0.1)
+
+    st.markdown("#### P/E-värden (senaste 5 åren)")
+    pe_values = [st.number_input(f"P/E {i+1}", value=pe_values[i], step=0.1, key=f"pe_{i}") for i in range(5)]
+
+    st.markdown("#### P/S-värden (senaste 5 åren)")
+    ps_values = [st.number_input(f"P/S {i+1}", value=ps_values[i], step=0.1, key=f"ps_{i}") for i in range(5)]
+
     col1, col2 = st.columns(2)
     with col1:
-        name = st.text_input("Bolagsnamn", value=name)
-        current_price = st.number_input("Nuvarande kurs", value=float(current_price), step=0.1)
-        pe_values = [st.number_input(f"P/E {i+1}", value=float(pe_values[i]) if pe_values[i] != "" else 0.0, step=0.1, key=f"pe{i}") for i in range(5)]
-        earnings_y = st.number_input("Vinst i år", value=float(earnings_y) if earnings_y != "" else 0.0, step=0.1)
+        earnings_y = st.number_input("Vinst i år", value=earnings_y, step=0.1)
+        growth_y = st.number_input("Omsättningstillväxt i år (%)", value=growth_y, step=0.1)
     with col2:
-        ps_values = [st.number_input(f"P/S {i+1}", value=float(ps_values[i]) if ps_values[i] != "" else 0.0, step=0.1, key=f"ps{i}") for i in range(5)]
-        earnings_ny = st.number_input("Vinst nästa år", value=float(earnings_ny) if earnings_ny != "" else 0.0, step=0.1)
-        growth_y = st.number_input("Omsättningstillväxt i år (%)", value=float(growth_y) if growth_y != "" else 0.0, step=0.1)
-        growth_ny = st.number_input("Omsättningstillväxt nästa år (%)", value=float(growth_ny) if growth_ny != "" else 0.0, step=0.1)
+        earnings_ny = st.number_input("Vinst nästa år", value=earnings_ny, step=0.1)
+        growth_ny = st.number_input("Omsättningstillväxt nästa år (%)", value=growth_ny, step=0.1)
 
     submitted = st.form_submit_button("💾 Spara bolag")
     if submitted:
@@ -115,11 +118,13 @@ with st.form("company_form"):
                 "growth_ny": growth_ny,
                 "target_price": target_price
             }
+            companies = dict(sorted(companies.items()))  # sortera i bokstavsordning
             save_data(companies)
-            st.success(f"✅ {name} sparades!")
+            st.success(f"{name} sparades!")
             st.session_state.selected_company = name
             st.experimental_rerun()
 
+# === ANALYSDEL ===
 if st.session_state.selected_company:
     st.subheader("📊 Analys")
     company = companies[st.session_state.selected_company]
@@ -134,7 +139,6 @@ if st.session_state.selected_company:
     st.write(f"💰 **Köp vid 30% marginal:** {margin_30} kr")
     st.write(f"💰 **Köp vid 40% marginal:** {margin_40} kr")
 
-    # Redigera / Ta bort
     st.markdown("---")
     colA, colB = st.columns(2)
     with colA:
