@@ -16,16 +16,13 @@ def calculate_target_price(pe_values, ps_values, earnings_this_year, earnings_ne
     avg_ps = sum(ps_values) / len(ps_values)
     avg_growth = (growth_this_year + growth_next_year) / 2
 
-    # Medelvinst
     avg_earnings = (earnings_this_year + earnings_next_year) / 2
     avg_sales_growth_factor = 1 + avg_growth / 100
 
-    # Targetkurser baserat på P/E och P/S
     target_pe = avg_pe * avg_earnings
     target_ps = avg_ps * avg_sales_growth_factor * avg_earnings
 
     target_price = (target_pe + target_ps) / 2
-
     undervaluation_percent = ((target_price - current_price) / current_price) * 100
 
     price_margin_30 = target_price * 0.7
@@ -33,22 +30,34 @@ def calculate_target_price(pe_values, ps_values, earnings_this_year, earnings_ne
 
     return round(target_price, 2), round(undervaluation_percent, 2), round(price_margin_30, 2), round(price_margin_40, 2)
 
-# Visa formulär
+# Lägg till nytt bolag-knapp (alltid synlig)
+if st.button("➕ Lägg till nytt bolag"):
+    st.session_state.selected_company = None
+    for key in list(st.session_state.keys()):
+        if key.startswith("pe_") or key.startswith("ps_"):
+            st.session_state[key] = 0.0
+    # Nollställ övriga inputs
+    for key in ["Förväntad vinst i år", "Förväntad vinst nästa år", "Omsättningstillväxt i år (%)",
+                "Omsättningstillväxt nästa år (%)", "Nuvarande kurs"]:
+        if key in st.session_state:
+            del st.session_state[key]
+
+# Formulär
 with st.form("company_form"):
     st.subheader("Lägg till / redigera bolag")
 
     name = st.text_input("Bolagsnamn", value="" if st.session_state.selected_company is None else st.session_state.selected_company)
 
-    pe_values = [st.number_input(f"P/E {i+1}", key=f"pe_{i}", value=0.0) for i in range(5)]
-    ps_values = [st.number_input(f"P/S {i+1}", key=f"ps_{i}", value=0.0) for i in range(5)]
+    pe_values = [st.number_input(f"P/E {i+1}", key=f"pe_{i}", value=0.0, format="%.2f") for i in range(5)]
+    ps_values = [st.number_input(f"P/S {i+1}", key=f"ps_{i}", value=0.0, format="%.2f") for i in range(5)]
 
-    earnings_this_year = st.number_input("Förväntad vinst i år", value=0.0)
-    earnings_next_year = st.number_input("Förväntad vinst nästa år", value=0.0)
+    earnings_this_year = st.number_input("Förväntad vinst i år", value=0.0, format="%.2f")
+    earnings_next_year = st.number_input("Förväntad vinst nästa år", value=0.0, format="%.2f")
 
-    growth_this_year = st.number_input("Omsättningstillväxt i år (%)", value=0.0)
-    growth_next_year = st.number_input("Omsättningstillväxt nästa år (%)", value=0.0)
+    growth_this_year = st.number_input("Omsättningstillväxt i år (%)", value=0.0, format="%.2f")
+    growth_next_year = st.number_input("Omsättningstillväxt nästa år (%)", value=0.0, format="%.2f")
 
-    current_price = st.number_input("Nuvarande kurs", value=0.0)
+    current_price = st.number_input("Nuvarande kurs", value=0.0, format="%.2f")
 
     submitted = st.form_submit_button("💾 Spara bolag")
 
@@ -65,14 +74,7 @@ with st.form("company_form"):
         st.session_state.selected_company = name
         st.success(f"{name} sparad!")
 
-# Rensa fälten
-if st.button("➕ Lägg till nytt bolag"):
-    st.session_state.selected_company = None
-    for key in list(st.session_state.keys()):
-        if key.startswith("pe_") or key.startswith("ps_"):
-            st.session_state[key] = 0.0
-
-# Visa lista över bolag
+# Lista över sparade bolag
 if st.session_state.companies:
     st.subheader("📊 Sparade bolag")
 
@@ -101,7 +103,7 @@ if st.session_state.companies:
             st.session_state.selected_company = None
             st.success(f"{selected} borttaget.")
 
-# Filtrera bolag
+# Filtrera undervärderade bolag
 if st.session_state.companies:
     st.subheader("🔍 Filtrera undervärderade bolag")
     filter_option = st.selectbox(
