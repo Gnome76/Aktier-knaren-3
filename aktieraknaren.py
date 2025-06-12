@@ -2,10 +2,9 @@ import streamlit as st
 import json
 import os
 
-# Filnamn för databasen
+# === Databasfil ===
 DATA_FILE = "data.json"
 
-# === FUNKTIONER ===
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
@@ -17,6 +16,9 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 def calculate_target_price(pe_list, ps_list, earnings_y, earnings_ny, growth_y, growth_ny):
+    if not all(isinstance(x, (int, float)) for x in pe_list + ps_list):
+        return 0.0
+
     avg_pe = sum(pe_list) / len(pe_list)
     avg_ps = sum(ps_list) / len(ps_list)
 
@@ -28,7 +30,7 @@ def calculate_target_price(pe_list, ps_list, earnings_y, earnings_ny, growth_y, 
     return round(final_target_price, 2)
 
 def undervaluation_status(current_price, target_price):
-    diff_pct = (target_price - current_price) / target_price * 100
+    diff_pct = (target_price - current_price) / target_price * 100 if target_price else 0
     if diff_pct >= 40:
         return "Undervärderad >40%", diff_pct
     elif 30 <= diff_pct < 40:
@@ -38,7 +40,7 @@ def undervaluation_status(current_price, target_price):
     else:
         return "Övervärderad", diff_pct
 
-# === APP START ===
+# === APP ===
 st.set_page_config(page_title="Aktieräknaren", layout="centered")
 st.title("📈 Aktieräknaren")
 
@@ -46,7 +48,7 @@ companies = load_data()
 if "selected_company" not in st.session_state:
     st.session_state.selected_company = None
 
-# === SIDOPANEL ===
+# === Filtrering ===
 st.sidebar.header("🔍 Filtrera bolag")
 filter_option = st.sidebar.selectbox(
     "Visa bolag som är...",
@@ -82,16 +84,16 @@ else:
     growth_y = 0.0
     growth_ny = 0.0
 
-# === FORMULÄR ===
+# === Formulär ===
 st.header("➕ Lägg till / Redigera bolag")
 with st.form("company_form"):
     name = st.text_input("Bolagsnamn", value=name)
     current_price = st.number_input("Nuvarande kurs", value=current_price, step=0.1)
 
-    st.markdown("#### P/E-värden (senaste 5 åren)")
+    st.markdown("#### P/E-värden (5 år)")
     pe_values = [st.number_input(f"P/E {i+1}", value=pe_values[i], step=0.1, key=f"pe_{i}") for i in range(5)]
 
-    st.markdown("#### P/S-värden (senaste 5 åren)")
+    st.markdown("#### P/S-värden (5 år)")
     ps_values = [st.number_input(f"P/S {i+1}", value=ps_values[i], step=0.1, key=f"ps_{i}") for i in range(5)]
 
     col1, col2 = st.columns(2)
@@ -107,24 +109,27 @@ with st.form("company_form"):
         if name.strip() == "":
             st.error("❌ Ange ett bolagsnamn.")
         else:
-            target_price = calculate_target_price(pe_values, ps_values, earnings_y, earnings_ny, growth_y, growth_ny)
-            companies[name] = {
-                "current_price": current_price,
-                "pe_values": pe_values,
-                "ps_values": ps_values,
-                "earnings_y": earnings_y,
-                "earnings_ny": earnings_ny,
-                "growth_y": growth_y,
-                "growth_ny": growth_ny,
-                "target_price": target_price
-            }
-            companies = dict(sorted(companies.items()))  # sortera i bokstavsordning
-            save_data(companies)
-            st.success(f"{name} sparades!")
-            st.session_state.selected_company = name
-            st.experimental_rerun()
+            try:
+                target_price = calculate_target_price(pe_values, ps_values, earnings_y, earnings_ny, growth_y, growth_ny)
+                companies[name] = {
+                    "current_price": current_price,
+                    "pe_values": pe_values,
+                    "ps_values": ps_values,
+                    "earnings_y": earnings_y,
+                    "earnings_ny": earnings_ny,
+                    "growth_y": growth_y,
+                    "growth_ny": growth_ny,
+                    "target_price": target_price
+                }
+                companies = dict(sorted(companies.items()))
+                save_data(companies)
+                st.success(f"{name} sparades!")
+                st.session_state.selected_company = name
+                st.experimental_rerun()
+            except Exception as e:
+                st.error(f"Fel vid sparande: {e}")
 
-# === ANALYSDEL ===
+# === Analys ===
 if st.session_state.selected_company:
     st.subheader("📊 Analys")
     company = companies[st.session_state.selected_company]
