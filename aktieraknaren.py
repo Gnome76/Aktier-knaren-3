@@ -7,7 +7,6 @@ st.title("🎯 Aktieräknaren – Spara & Beräkna Targetkurs")
 
 DATA_FILE = "bolag_data.csv"
 
-# Ladda eller initiera databas
 if os.path.exists(DATA_FILE):
     df = pd.read_csv(DATA_FILE)
 else:
@@ -57,9 +56,18 @@ if submitted:
     vinsttillvaxt = ((vinst_nasta_ar - vinst_i_ar) / vinst_i_ar) * 100 if vinst_i_ar != 0 else 0
     oms_tillv_snitt = (oms_tillv_i_ar + oms_tillv_nasta_ar) / 2
 
+    # Targetkurs via P/E
     target_pe = vinst_nasta_ar * pe_snitt
-    target_peg = vinst_nasta_ar * (peg_snitt * vinsttillvaxt)
-    target_ps = ps_snitt * (1 + oms_tillv_snitt / 100)
+
+    # Targetkurs via PEG (räknar fram rimligt PE)
+    rimligt_pe = peg_snitt * (vinsttillvaxt if vinsttillvaxt != 0 else 1)
+    target_peg = vinst_nasta_ar * rimligt_pe
+
+    # Targetkurs via P/S (beräknar omsättning per aktie baserat på kurs idag)
+    oms_per_aktie_idag = kurs / ps_snitt if ps_snitt != 0 else 1
+    oms_per_aktie_framtid = oms_per_aktie_idag * (1 + oms_tillv_snitt / 100)
+    target_ps = ps_snitt * oms_per_aktie_framtid
+
     riktkurs = (target_pe + target_peg + target_ps) / 3
 
     undervarderad = kurs < riktkurs
@@ -76,7 +84,6 @@ if submitted:
     st.write(f"💰 Köp om du vill ha 30% marginal: **{margin_30:.2f} kr**")
     st.write(f"💰 Köp om du vill ha 40% marginal: **{margin_40:.2f} kr**")
 
-    # Uppdatera databas
     new_row = {
         "Bolagsnamn": namn,
         "Nuvarande kurs": kurs,
