@@ -66,13 +66,13 @@ st.markdown("### 🧮 Nyckeltal")
 namn = st.text_input("Bolagsnamn", value=valt_bolag["namn"] if valt_bolag else "")
 
 kurs = st.number_input("Nuvarande kurs (kr)", min_value=0.0, step=0.01, format="%.2f",
-                       value=float(valt_bolag["kurs"]) if valt_bolag else None)
+                       value=float(valt_bolag["kurs"]) if valt_bolag and "kurs" in valt_bolag else 0.0)
 
 # P/E
 pe_cols = st.columns(5)
 pe_list = []
 for i in range(5):
-    value = float(valt_bolag["pe"][i]) if valt_bolag else None
+    value = float(valt_bolag["pe"][i]) if valt_bolag and "pe" in valt_bolag and len(valt_bolag["pe"]) > i else 0.0
     pe = pe_cols[i].number_input(f"P/E {i+1}", min_value=0.0, step=0.01, format="%.2f", value=value)
     pe_list.append(pe)
 
@@ -80,23 +80,23 @@ for i in range(5):
 ps_cols = st.columns(5)
 ps_list = []
 for i in range(5):
-    value = float(valt_bolag["ps"][i]) if valt_bolag else None
+    value = float(valt_bolag["ps"][i]) if valt_bolag and "ps" in valt_bolag and len(valt_bolag["ps"]) > i else 0.0
     ps = ps_cols[i].number_input(f"P/S {i+1}", min_value=0.0, step=0.01, format="%.2f", value=value)
     ps_list.append(ps)
 
 # Vinst
 vinster = st.columns(2)
 vinst_i_ar = vinster[0].number_input("Vinst i år (kr)", step=0.01, format="%.2f",
-                                     value=float(valt_bolag["vinst_i_ar"]) if valt_bolag else None)
+    value=float(valt_bolag["vinst_i_ar"]) if valt_bolag and "vinst_i_ar" in valt_bolag else 0.0)
 vinst_next = vinster[1].number_input("Vinst nästa år (kr)", step=0.01, format="%.2f",
-                                     value=float(valt_bolag["vinst_next"]) if valt_bolag else None)
+    value=float(valt_bolag["vinst_next"]) if valt_bolag and "vinst_next" in valt_bolag else 0.0)
 
 # Omsättningstillväxt
 oms_cols = st.columns(2)
 oms_i_ar = oms_cols[0].number_input("Omsättningstillväxt i år (%)", step=0.1, format="%.1f",
-                                    value=float(valt_bolag["oms_i_ar"]) if valt_bolag else None)
+    value=float(valt_bolag["oms_i_ar"]) if valt_bolag and "oms_i_ar" in valt_bolag else 0.0)
 oms_next = oms_cols[1].number_input("Omsättningstillväxt nästa år (%)", step=0.1, format="%.1f",
-                                    value=float(valt_bolag["oms_next"]) if valt_bolag else None)
+    value=float(valt_bolag["oms_next"]) if valt_bolag and "oms_next" in valt_bolag else 0.0)
 
 # ------------------- BERÄKNING -------------------
 avg_pe = sum(pe_list) / len(pe_list)
