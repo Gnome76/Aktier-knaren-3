@@ -99,9 +99,9 @@ with st.form("company_form"):
     col1, col2 = st.columns(2)
     with col1:
         earnings_y = st.number_input("Vinst i år", value=earnings_y, step=0.1)
-        growth_y = st.number_input("Omsättningstillväxt i år (%)", value=growth_y, step=0.1)
-    with col2:
         earnings_ny = st.number_input("Vinst nästa år", value=earnings_ny, step=0.1)
+    with col2:
+        growth_y = st.number_input("Omsättningstillväxt i år (%)", value=growth_y, step=0.1)
         growth_ny = st.number_input("Omsättningstillväxt nästa år (%)", value=growth_ny, step=0.1)
 
     submitted = st.form_submit_button("💾 Spara bolag")
@@ -125,7 +125,7 @@ with st.form("company_form"):
                 save_data(companies)
                 st.success(f"{name} sparades!")
                 st.session_state.selected_company = name
-                st.experimental_rerun()
+                st.rerun()
             except Exception as e:
                 st.error(f"Fel vid sparande: {e}")
 
@@ -152,8 +152,8 @@ if st.session_state.selected_company:
             save_data(companies)
             st.success("Bolaget togs bort.")
             st.session_state.selected_company = None
-            st.experimental_rerun()
+            st.rerun()
     with colB:
         if st.button("➕ Lägg till nytt bolag"):
             st.session_state.selected_company = None
-            st.experimental_rerun()
+            st.rerun()
