@@ -44,15 +44,32 @@ if val == "Lägg till/Redigera bolag":
     if st.button("Lägg till nytt bolag"):
         st.session_state.selected_bolag = ""
 
-    bolagsnamn = st.text_input("Bolagsnamn", value=st.session_state.selected_bolag)
+    valt_bolag = st.session_state.selected_bolag
+    redigerar = valt_bolag in data
 
-    pe_values = [st.number_input(f"P/E kvartal {i+1}", min_value=0.0) for i in range(5)]
-    ps_values = [st.number_input(f"P/S kvartal {i+1}", min_value=0.0) for i in range(5)]
-    kurs = st.number_input("Nuvarande aktiekurs", min_value=0.0)
-    vinst_i_ar = st.number_input("Beräknad vinst i år (kr)", min_value=0.0)
-    vinst_next_ar = st.number_input("Beräknad vinst nästa år (kr)", min_value=0.0)
-    oms_tillv_i_ar = st.number_input("Omsättningstillväxt i år (%)", min_value=0.0)
-    oms_tillv_next_ar = st.number_input("Omsättningstillväxt nästa år (%)", min_value=0.0)
+    bolagsnamn = st.text_input("Bolagsnamn", value=valt_bolag)
+
+    pe_values = []
+    ps_values = []
+
+    for i in range(5):
+        pe = st.number_input(f"P/E kvartal {i+1}", min_value=0.01, step=0.1,
+                             value=data[valt_bolag]["pe"][i] if redigerar else 0.01)
+        ps = st.number_input(f"P/S kvartal {i+1}", min_value=0.01, step=0.1,
+                             value=data[valt_bolag]["ps"][i] if redigerar else 0.01)
+        pe_values.append(pe)
+        ps_values.append(ps)
+
+    kurs = st.number_input("Nuvarande aktiekurs", min_value=0.01, step=0.1,
+                           value=data[valt_bolag]["kurs"] if redigerar else 0.01)
+    vinst_i_ar = st.number_input("Beräknad vinst i år (kr)", min_value=0.01, step=0.1,
+                                 value=data[valt_bolag]["vinst_i_ar"] if redigerar else 0.01)
+    vinst_next_ar = st.number_input("Beräknad vinst nästa år (kr)", min_value=0.01, step=0.1,
+                                    value=data[valt_bolag]["vinst_next_ar"] if redigerar else 0.01)
+    oms_tillv_i_ar = st.number_input("Omsättningstillväxt i år (%)", min_value=0.01, step=0.1,
+                                     value=data[valt_bolag]["oms_tillv_i_ar"] if redigerar else 0.01)
+    oms_tillv_next_ar = st.number_input("Omsättningstillväxt nästa år (%)", min_value=0.01, step=0.1,
+                                        value=data[valt_bolag]["oms_tillv_next_ar"] if redigerar else 0.01)
 
     if st.button("Spara bolag"):
         target = calculate_target_price(pe_values, ps_values, vinst_i_ar, vinst_next_ar, oms_tillv_i_ar, oms_tillv_next_ar)
