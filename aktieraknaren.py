@@ -20,7 +20,7 @@ def calculate_target_price(pe_values, ps_values, earnings_this_year, earnings_ne
     future_earnings = (earnings_this_year + earnings_next_year) / 2
     avg_growth = (revenue_growth_this_year + revenue_growth_next_year) / 2 / 100
     target_price_pe = future_earnings * avg_pe
-    target_price_ps = (future_earnings / (1 + avg_growth)) * avg_ps  # enklare approximation
+    target_price_ps = (future_earnings / (1 + avg_growth)) * avg_ps
     return round((target_price_pe + target_price_ps) / 2, 2)
 
 def clear_form():
@@ -48,7 +48,7 @@ if not filtered_df.empty:
 else:
     selected_name = st.selectbox("Välj bolag", [""])
 
-# === LÄGG TILL NYTT BOLAG KNAPP ===
+# === LÄGG TILL NYTT BOLAG ===
 st.button("➕ Lägg till nytt bolag", on_click=clear_form)
 
 # === FORMULÄR ===
@@ -60,7 +60,18 @@ else:
     selected_row = pd.Series(dtype="float64")
     selected_name = ""
 
-cols = st.columns(6)
+# === ÖVERSTA DELEN – Bolagsnamn och nuvarande kurs ===
+col_top1, col_top2 = st.columns(2)
+bolagsnamn = col_top1.text_input("Bolagsnamn", selected_name)
+kurs = col_top2.number_input(
+    "Nuvarande kurs",
+    step=0.01,
+    value=selected_row.get("Nuvarande Kurs") if "Nuvarande Kurs" in selected_row else None,
+    format="%.2f"
+)
+
+# === P/E och P/S ===
+cols = st.columns(5)
 pe_values = []
 ps_values = []
 
@@ -74,8 +85,9 @@ for i in range(5):
     )
     pe_values.append(pe)
 
+cols2 = st.columns(5)
 for i in range(5):
-    ps = cols[i].number_input(
+    ps = cols2[i].number_input(
         f"P/S {i+1}",
         step=0.01,
         value=selected_row.get(f"PS_{i+1}") if f"PS_{i+1}" in selected_row else None,
@@ -84,6 +96,7 @@ for i in range(5):
     )
     ps_values.append(ps)
 
+# === VINST & TILLVÄXT ===
 col1, col2 = st.columns(2)
 earnings_this_year = col1.number_input(
     "Beräknad vinst i år",
@@ -111,15 +124,6 @@ revenue_growth_next_year = col4.number_input(
     value=selected_row.get("Omsättningstillväxt nästa år") if "Omsättningstillväxt nästa år" in selected_row else None,
     format="%.1f"
 )
-
-kurs = st.number_input(
-    "Nuvarande kurs",
-    step=0.01,
-    value=selected_row.get("Nuvarande Kurs") if "Nuvarande Kurs" in selected_row else None,
-    format="%.2f"
-)
-
-bolagsnamn = st.text_input("Bolagsnamn", selected_name)
 
 # === SPARA BOLAG ===
 if st.button("💾 Spara bolag"):
