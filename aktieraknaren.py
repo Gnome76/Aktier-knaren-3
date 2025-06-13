@@ -2,143 +2,131 @@ import streamlit as st
 import pandas as pd
 import os
 
-DATAFIL = "bolag_data.csv"
+DATA_FILE = "bolag_data.csv"
 
-# Funktion: Läs eller initiera databas
-def las_data():
-    if os.path.exists(DATAFIL):
-        return pd.read_csv(DATAFIL)
-    else:
-        return pd.DataFrame(columns=[
-            "Bolagsnamn", "Nuvarande kurs", "Vinst i år", "Vinst nästa år",
-            "Omsättningstillväxt i år", "Omsättningstillväxt nästa år",
-            "P/E 1", "P/E 2", "P/E 3", "P/E 4", "P/E 5",
-            "P/S 1", "P/S 2", "P/S 3", "P/S 4", "P/S 5"
-        ])
+def load_data():
+    if os.path.exists(DATA_FILE):
+        return pd.read_csv(DATA_FILE)
+    return pd.DataFrame(columns=[
+        "Bolagsnamn", "Nuvarande kurs", "Vinst i år", "Vinst nästa år",
+        "Omsättning i år", "Omsättning nästa år",
+        "P/E 1", "P/E 2", "P/E 3", "P/E 4", "P/E 5",
+        "P/S 1", "P/S 2", "P/S 3", "P/S 4", "P/S 5"
+    ])
 
-# Funktion: Spara databas
-def spara_data(df):
-    df.sort_values("Bolagsnamn", inplace=True)
-    df.to_csv(DATAFIL, index=False)
+def save_data(df):
+    df = df.sort_values("Bolagsnamn")
+    df.to_csv(DATA_FILE, index=False)
 
-# Funktion: Beräkna riktkurs
-def berakna_riktkurs(row):
-    try:
-        pe_median = pd.to_numeric(row[["P/E 1", "P/E 2", "P/E 3", "P/E 4", "P/E 5"]]).median()
-        ps_median = pd.to_numeric(row[["P/S 1", "P/S 2", "P/S 3", "P/S 4", "P/S 5"]]).median()
+def clear_fields():
+    st.session_state.clear_fields = True
 
-        framtida_vinst = float(row["Vinst nästa år"])
-        framtida_oms = (1 + float(row["Omsättningstillväxt nästa år"]) / 100)
-        nuvarande_oms = framtida_oms / (1 + float(row["Omsättningstillväxt i år"]) / 100)
-        omsattning_nasta_ar = nuvarande_oms * framtida_oms
-        aktier = omsattning_nasta_ar / framtida_vinst if framtida_vinst else 1  # antagande
+st.title("📈 Aktieräknaren")
 
-        pe_target = framtida_vinst * pe_median
-        ps_target = omsattning_nasta_ar * ps_median / aktier
+df = load_data()
+bolagslista = df["Bolagsnamn"].tolist()
 
-        target = (pe_target + ps_target) / 2
-        return round(target, 2)
-    except:
-        return None
+# Filtrering
+st.subheader("🔍 Filtrera bolag")
+filter_val = st.selectbox(
+    "Välj filter för undervärdering",
+    ["Alla", "Undervärderade 30–39%", "Undervärderade 40%+"]
+)
 
-# Funktion: visa analys
-def visa_analys(bolag, riktkurs):
-    kurs = float(bolag["Nuvarande kurs"])
-    diff = riktkurs - kurs
-    procent = (diff / kurs) * 100
+filtered_df = df.copy()
+if filter_val == "Undervärderade 30–39%":
+    filtered_df = df[df["Undervärdering (%)"].between(30, 39.99)]
+elif filter_val == "Undervärderade 40%+":
+    filtered_df = df[df["Undervärdering (%)"] >= 40]
 
-    färg = "🟢" if procent >= 30 else "🟡" if 0 < procent < 30 else "🔴"
-    status = "Undervärderad" if procent > 0 else "Övervärderad"
+selected_name = st.selectbox("Välj bolag att visa eller redigera", [""] + filtered_df["Bolagsnamn"].tolist())
 
-    st.subheader(f"{färg} {status}: {procent:.1f}%")
-    st.write(f"📈 **Targetkurs:** {riktkurs} kr")
-    st.write(f"✅ Köp vid 30% marginal: {riktkurs * 0.7:.2f} kr")
-    st.write(f"✅ Köp vid 40% marginal: {riktkurs * 0.6:.2f} kr")
+# Init
+if "clear_fields" not in st.session_state:
+    st.session_state.clear_fields = False
 
-# Hämta data
-data = las_data()
-
-# 🧭 UI – Filtrering högst upp
-st.title("📊 Aktieräknaren")
-filtrering = st.selectbox("Filtrera bolag", ["Visa alla", "Undervärderade 30–39%", "Undervärderade 40%+"])
-
-# Rullista med sparade bolag
-val = st.selectbox("📂 Välj bolag", ["(Lägg till nytt bolag)"] + list(data["Bolagsnamn"]))
-
-if val == "(Lägg till nytt bolag)":
-    bolagsdata = {
-        "Bolagsnamn": "",
-        "Nuvarande kurs": "",
-        "Vinst i år": "",
-        "Vinst nästa år": "",
-        "Omsättningstillväxt i år": "",
-        "Omsättningstillväxt nästa år": "",
-        **{f"P/E {i}": "" for i in range(1, 6)},
-        **{f"P/S {i}": "" for i in range(1, 6)},
-    }
+if selected_name and not st.session_state.clear_fields:
+    selected = df[df["Bolagsnamn"] == selected_name].iloc[0]
 else:
-    bolagsdata = data[data["Bolagsnamn"] == val].iloc[0].to_dict()
+    selected = pd.Series(dtype=float)
 
-# 🧾 Inmatningsfält
-with st.form("bolagsform"):
-    st.subheader("🔢 Nyckeltal & Data")
-    kol1, kol2, kol3 = st.columns(3)
+# Input
+st.subheader("✏️ Lägg till eller redigera bolag")
+col1, col2, col3 = st.columns(3)
+col4, col5, col6 = st.columns(3)
 
-    with kol1:
-        bolagsdata["Bolagsnamn"] = st.text_input("Bolagsnamn", bolagsdata["Bolagsnamn"])
-        bolagsdata["Nuvarande kurs"] = st.number_input("Nuvarande kurs", value=float(bolagsdata["Nuvarande kurs"] or 0), format="%.2f")
+with col1:
+    name = st.text_input("Bolagsnamn", value=selected.get("Bolagsnamn", ""))
+with col2:
+    price = st.number_input("Nuvarande kurs", min_value=0.0, format="%.2f", value=selected.get("Nuvarande kurs", 0.0) if not st.session_state.clear_fields else 0.0)
+with col3:
+    vinst_1 = st.number_input("Vinst i år", min_value=0.0, format="%.2f", value=selected.get("Vinst i år", 0.0) if not st.session_state.clear_fields else 0.0)
 
-    with kol2:
-        bolagsdata["Vinst i år"] = st.number_input("Vinst i år", value=float(bolagsdata["Vinst i år"] or 0), format="%.2f")
-        bolagsdata["Vinst nästa år"] = st.number_input("Vinst nästa år", value=float(bolagsdata["Vinst nästa år"] or 0), format="%.2f")
+with col4:
+    vinst_2 = st.number_input("Vinst nästa år", min_value=0.0, format="%.2f", value=selected.get("Vinst nästa år", 0.0) if not st.session_state.clear_fields else 0.0)
+with col5:
+    oms_1 = st.number_input("Omsättning i år", min_value=0.0, format="%.2f", value=selected.get("Omsättning i år", 0.0) if not st.session_state.clear_fields else 0.0)
+with col6:
+    oms_2 = st.number_input("Omsättning nästa år", min_value=0.0, format="%.2f", value=selected.get("Omsättning nästa år", 0.0) if not st.session_state.clear_fields else 0.0)
 
-    with kol3:
-        bolagsdata["Omsättningstillväxt i år"] = st.number_input("Omsättningstillväxt i år (%)", value=float(bolagsdata["Omsättningstillväxt i år"] or 0), format="%.2f")
-        bolagsdata["Omsättningstillväxt nästa år"] = st.number_input("Omsättningstillväxt nästa år (%)", value=float(bolagsdata["Omsättningstillväxt nästa år"] or 0), format="%.2f")
+st.markdown("#### 🔢 Nyckeltalshistorik")
+pe_cols = st.columns(5)
+ps_cols = st.columns(5)
 
-    st.markdown("---")
-    st.write("📘 Historiska P/E-tal:")
-    pe_cols = st.columns(5)
-    for i in range(1, 6):
-        bolagsdata[f"P/E {i}"] = pe_cols[i - 1].number_input(f"P/E {i}", value=float(bolagsdata[f"P/E {i}"] or 0), format="%.2f")
+pe_values = [pe_cols[i].number_input(f"P/E {i+1}", min_value=0.0, format="%.2f", value=selected.get(f"P/E {i+1}", 0.0) if not st.session_state.clear_fields else 0.0) for i in range(5)]
+ps_values = [ps_cols[i].number_input(f"P/S {i+1}", min_value=0.0, format="%.2f", value=selected.get(f"P/S {i+1}", 0.0) if not st.session_state.clear_fields else 0.0) for i in range(5)]
 
-    st.write("📗 Historiska P/S-tal:")
-    ps_cols = st.columns(5)
-    for i in range(1, 6):
-        bolagsdata[f"P/S {i}"] = ps_cols[i - 1].number_input(f"P/S {i}", value=float(bolagsdata[f"P/S {i}"] or 0), format="%.2f")
+# Beräkningar
+if name:
+    pe_target = vinst_2 * sum(pe_values)/5 if vinst_2 else 0
+    ps_target = oms_2 * sum(ps_values)/5 if oms_2 else 0
+    target = round((pe_target + ps_target)/2, 2) if (pe_target and ps_target) else 0
+    underv = round((target - price) / price * 100, 2) if price else 0
+    buy_30 = round(target * 0.7, 2)
+    buy_40 = round(target * 0.6, 2)
 
-    sparaknapp = st.form_submit_button("💾 Spara bolag")
+    st.subheader("📊 Analys")
+    st.write(f"🎯 Targetkurs: **{target} kr**")
+    st.write(f"📉 Undervärdering: **{underv}%**")
+    st.write(f"🟡 Köpkurs med 30% marginal: {buy_30} kr")
+    st.write(f"🟢 Köpkurs med 40% marginal: {buy_40} kr")
+else:
+    st.warning("Ange ett bolagsnamn för att göra beräkningar.")
 
-if sparaknapp:
-    try:
-        if not bolagsdata["Bolagsnamn"]:
-            st.error("Bolagsnamn får inte vara tomt.")
-        else:
-            df_ny = pd.DataFrame([bolagsdata])
-            data = data[data["Bolagsnamn"] != bolagsdata["Bolagsnamn"]]
-            data = pd.concat([data, df_ny], ignore_index=True)
-            spara_data(data)
-            st.success("Bolaget har sparats! 🚀")
-            st.experimental_rerun()
-    except Exception as e:
-        st.error(f"Fel vid sparande: {e}")
+# Spara/uppdatera
+if st.button("💾 Spara bolag"):
+    if not name:
+        st.error("Bolagsnamn krävs.")
+    else:
+        new_data = {
+            "Bolagsnamn": name,
+            "Nuvarande kurs": price,
+            "Vinst i år": vinst_1,
+            "Vinst nästa år": vinst_2,
+            "Omsättning i år": oms_1,
+            "Omsättning nästa år": oms_2,
+            **{f"P/E {i+1}": pe_values[i] for i in range(5)},
+            **{f"P/S {i+1}": ps_values[i] for i in range(5)},
+            "Undervärdering (%)": underv,
+            "Targetkurs": target
+        }
+        df = df[df["Bolagsnamn"] != name]
+        df = df.append(new_data, ignore_index=True)
+        save_data(df)
+        st.success("Bolaget sparat!")
+        st.experimental_rerun()
 
-# 🔎 Visa analys om bolag är valt
-if val != "(Lägg till nytt bolag)":
-    riktkurs = berakna_riktkurs(bolagsdata)
-    if riktkurs:
-        visa_analys(bolagsdata, riktkurs)
+# Ta bort bolag
+if selected_name and st.button("🗑️ Ta bort valt bolag"):
+    df = df[df["Bolagsnamn"] != selected_name]
+    save_data(df)
+    st.success(f"{selected_name} borttaget.")
+    st.experimental_rerun()
 
-# 📊 Visa filtrerat innehav
-if filtrering != "Visa alla":
-    filtrerat = []
-    for i, row in data.iterrows():
-        rikt = berakna_riktkurs(row)
-        if rikt:
-            nu = float(row["Nuvarande kurs"])
-            skillnad = (rikt - nu) / nu * 100
-            if filtrering == "Undervärderade 30–39%" and 30 <= skillnad < 40:
-                filtrerat.append(row["Bolagsnamn"])
-            elif filtrering == "Undervärderade 40%+" and skillnad >= 40:
-                filtrerat.append(row["Bolagsnamn"])
-    st.write("📌 Filtrerade bolag:", ", ".join(filtrerat) if filtrerat else "Inga bolag matchar filtret.")
+# Lägg till nytt bolag
+if st.button("➕ Lägg till nytt bolag"):
+    st.session_state.clear_fields = True
+    st.experimental_rerun()
+
+# Export
+st.download_button("⬇️ Ladda ner data som CSV", df.to_csv(index=False), "bolag_data.csv", "text/csv")
